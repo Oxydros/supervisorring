@@ -17,7 +17,7 @@ defmodule Supervisorring do
     end
     defmodule LocalSup do
       use Supervisor
-      def start_link(sup_ref,strategy), do: 
+      def start_link(sup_ref,strategy), do:
         Supervisor.start_link(__MODULE__,strategy,name: Supervisorring.local_sup_ref(sup_ref))
       def init(strategy), do: {:ok,{strategy,[]}}
     end
@@ -40,7 +40,7 @@ defmodule Supervisorring do
         {:noreply,state}=handle_cast(:sync_children,%State{sup_ref: sup_ref,child_specs: child_specs,callback: callback})
         {:ok,state}
       end
-      def handle_info({:gen_event_EXIT,_,_},_), do: 
+      def handle_info({:gen_event_EXIT,_,_},_), do:
         exit(:ring_listener_died)
       def handle_call({:get_node,id},_,state), do:
         {:reply,ConsistentHash.node_for_key(state.ring,{state.sup_ref,id}),state}
@@ -66,7 +66,7 @@ defmodule Supervisorring do
         ## the tricky point is here, take only child specs with an id which is associate with the current node in the ring
         remote_children_keys = all_children |> Map.keys |> filter(&ConsistentHash.node_for_key(ring,{sup_ref,&1}) !== node())
         wanted_children = all_children |> Map.drop(remote_children_keys)
-                                             
+
         ## kill all the local children which should not be in the node, get/start child on the correct node to migrate state if needed
         cur_children |> filter(fn {id,_}->not Map.has_key?(wanted_children,id) end) |> each(fn {id,{id,child,type,modules}}->
           new_node = ConsistentHash.node_for_key(ring,{sup_ref,id})
@@ -80,7 +80,7 @@ defmodule Supervisorring do
           end
           sup_ref |> Supervisorring.local_sup_ref |> Supervisor.delete_child(id)
         end)
-        wanted_children |> filter(fn {id,_}->not Map.has_key?(cur_children,id) end) |> each(fn {_,childspec}-> 
+        wanted_children |> filter(fn {id,_}->not Map.has_key?(cur_children,id) end) |> each(fn {_,childspec}->
           Supervisor.start_child(Supervisorring.local_sup_ref(sup_ref),childspec)
         end)
         {:noreply,%{state|ring: ring}}
@@ -115,7 +115,7 @@ defmodule Supervisorring do
     :supervisorring.start_link({:local, name}, module, arg)
   end
 
-  defdelegate find(supref,id), to: :supervisorring
+  defdelegate find(supref,id,timeout \\ 5_000), to: :supervisorring
   defdelegate exec(supref,id,fun,timeout,retry), to: :supervisorring
   defdelegate exec(supref,id,fun,timeout), to: :supervisorring
   defdelegate exec(supref,id,fun), to: :supervisorring
@@ -149,8 +149,8 @@ defmodule :supervisorring do
   @callback init(args::term) :: any
 
   @doc "find node is fast but rely on local ring"
-  def find(supref,id), do: 
-    GenServer.call(Supervisorring.child_manager_ref(supref),{:get_node,id})
+  def find(supref,id,timeout \\ 5_000), do:
+    GenServer.call(Supervisorring.child_manager_ref(supref),{:get_node,id}, timeout)
   @doc """
   exec() remotely queued execution to ensure reliability even if a node of the
   ring has just crashed... with nb_try retry if timeout is reached
@@ -173,7 +173,7 @@ defmodule :supervisorring do
   def start_link({:local,name},module,args), do:
     Supervisorring.GlobalSup.start_link(name,{module,args})
 
-  @doc """ 
+  @doc """
   to maintain global process list related to a given {:child_spec_gen,fun} external child list specification
   """
   def start_child(supref,{id,_,_,_,_,_}=childspec) do
@@ -193,7 +193,7 @@ defmodule :supervisorring do
     exec(supref,id,fn->Supervisor.terminate_child(Supervisorring.local_sup_ref(supref),id) end)
   end
 
-  @doc """ 
+  @doc """
   to maintain global process list related to a given {:child_spec_gen,fun} external child list specification
   """
   def delete_child(supref,id) do
